@@ -1,6 +1,6 @@
-.h5
-.pkl
-
+*.h5
+*.pkl
+*.npz
 
 
 ## Ignore Visual Studio temporary files, build results, and
