@@ -24,6 +24,8 @@ from sklearn.cluster import DBSCAN
 
 from spycon.coninf import Smoothed_CCG
 
+import traceback
+
 
 sys.path.append("..")
 from analysis_package import maxlab_analysis as mla
@@ -193,7 +195,7 @@ def predict_network(data_path, save_path, well_no = 0, recording_no = 0, start_t
 
         #Set up save location and logs and timing
         full_start = time.time()
-        logging.info("Starting processing file " + data_path + ": " + time.strftime("%m/%d/%Y, %H:%M:%S", time.localtime(full_start)))
+        logging.info("Starting processing file " + data_path + ": " + time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime(full_start)))
         logging.info(
             f"""\t-----------PARAMS-----------
 \tdata_path: {data_path}
@@ -210,25 +212,25 @@ def predict_network(data_path, save_path, well_no = 0, recording_no = 0, start_t
             )
 
         start = time.time()
-        logging.info(f"\tLoading data: {time.strftime("%m/%d/%Y, %H:%M:%S", time.localtime(start))}")
+        logging.info(f"\tLoading data: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime(start))}")
         spike_pd_df, mapping_pd_df = load_data(data_path, well_no = well_no, recording_no = recording_no, start_time = start_time, end_time = end_time)
         spike_pd_df.to_csv(f"{save_path}01_original_spike_df.csv", index = False)
         mapping_pd_df.to_csv(f"{save_path}02_original_mapping_df.csv", index = False)
         
         end = time.time()
-        logging.info(f"\tComplete: {time.strftime("%m/%d/%Y, %H:%M:%S", time.localtime(end))} (Duration = {end - start} s)")
+        logging.info(f"\tComplete: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime(end))} (Duration = {end - start} s)")
 
         if remove_bursts:
             start = time.time()
-            logging.info("\tRemoving bursts: " + time.strftime("%m/%d/%Y, %H:%M:%S", time.localtime(start)))
+            logging.info("\tRemoving bursts: " + time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime(start)))
             spike_pd_df = remove_synchronized_bursts(spike_pd_df)
-            logging.info(f"\tComplete: {time.strftime("%m/%d/%Y, %H:%M:%S", time.localtime(end))} (Duration = {end - start} s)")
+            logging.info(f"\tComplete: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime(end))} (Duration = {end - start} s)")
             spike_pd_df.to_csv(f"{save_path}03_burst_removed_spike_df.csv", index = False)
             
         
         
         start = time.time()
-        logging.info("\tSelecting and clustering electrodes: " + time.strftime("%m/%d/%Y, %H:%M:%S", time.localtime(start)))
+        logging.info("\tSelecting and clustering electrodes: " + time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime(start)))
         mapping_pd_df = calculate_spike_freqs_and_amps(spike_pd_df, mapping_pd_df)
         mapping_pd_df.to_csv(f"{save_path}04_mapping_df_with_stats.csv", index = False)
         logging.info("\t\telectrode stats calculated")
@@ -249,12 +251,12 @@ def predict_network(data_path, save_path, well_no = 0, recording_no = 0, start_t
         plt.close()
         logging.info("\t\tspikes clustered")
         end = time.time()
-        logging.info(f"\tComplete: {time.strftime("%m/%d/%Y, %H:%M:%S", time.localtime(end))} (Duration = {end - start} s)")
+        logging.info(f"\tComplete: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime(end))} (Duration = {end - start} s)")
 
 
         #TODO: Pass in learning parameters for each method
         start = time.time()
-        logging.info("\tInferring connectivity: " + time.strftime("%m/%d/%Y, %H:%M:%S", time.localtime(start)))
+        logging.info("\tInferring connectivity: " + time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime(start)))
 
         plt.figure(figsize = (6, 3))
         spycon_result = infer_connectivity(grouped_spike_df, con_method = con_method)
@@ -263,7 +265,7 @@ def predict_network(data_path, save_path, well_no = 0, recording_no = 0, start_t
 
         spycon_result.save("spycon_network", save_path)
         end = time.time()
-        logging.info(f"\tComplete: {time.strftime("%m/%d/%Y, %H:%M:%S", time.localtime(end))} (Duration = {end - start} s)")
+        logging.info(f"\tComplete: {time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime(end))} (Duration = {end - start} s)")
 
         
 
@@ -388,28 +390,39 @@ def batch_predict_network(data_path: str, parent_folder: str, well_no = 0, recor
 
 
 if __name__ == '__main__':
-    days = [26, 27, 29, 30, 33, 34, 45, 36, 37, 38, 40, 41]
-    days = [30, 33]
+    days = [30, 33, 34, 45, 36, 37, 38, 40, 41]
+    #days = [30, 33]
     chip = "M07480"
     well_nos = range(6)
     pre_time = 20 #In theory, these can be extracted from events.
     train_time = 20
     post_time = 20
 
-
+    remote_drive_path = "R:/"
+    remote_drive_path = "/run/user/1000/gvfs/smb-share:server=rstoreint.it.tufts.edu,share=as_rsch_levinlab_wclawson01$/"
+    parent_save_path = "HDMEA-func-connectivity/data/test_network_results/"
+    parent_save_path = "/run/user/1000/gvfs/smb-share:server=rstoreint.it.tufts.edu,share=as_rsch_levinlab_wclawson01$/Experimental Data/nathan_senior_project_analysis/stim_removal_network_graphs/"
     for day in days:
         for well_no in well_nos:
-            file_path = f"R:/Experimental Data/Summer 2024/stim_removal/DIV{day}_stim_removal/{chip}/"
-            file_path = glob.glob(file_path + "/*/")[-1] #date
-            file_path = glob.glob(file_path + "/*/")[-1] #trial
-            file_path = file_path + f"well{well_no}/"
+            file_path = f"{remote_drive_path}Experimental Data/Summer 2024/stim_removal/DIV{day}_stim_removal/{chip}/"
+            print("")
+            print("Starting day {day} well {well_no}")
+            try:
+                file_path = glob.glob(file_path + "/*/")[-1] #date
+                file_path = glob.glob(file_path + "/*/")[-1] #trial
+                file_path = file_path + f"well{well_no}/"
 
-            file_name = f"DIV{day}_stim_removal_well_{well_no}.raw.h5"
+                file_name = f"DIV{day}_stim_removal_well_{well_no}.raw.h5"
 
-            recording_no = 0
+                recording_no = 0
 
-            save_path = f"HDMEA-func-connectivity/data/test_network_results/DIV{day}/well_no={well_no}/"
-            os.makedirs(save_path)
+                save_path = f"{parent_save_path}DIV{day}/well_no={well_no}/"
+                os.makedirs(save_path)
 
-            batch_predict_network(file_path + file_name, save_path, well_no = well_no, end_time = 2, remove_bursts = [True, False])
+            except Exception as err:
+                print("\tError!", type(err).__name__, err)
+                print(traceback.format_exc())
+                continue
+
+            batch_predict_network(file_path + file_name, save_path, well_no = well_no, end_time = 20, remove_bursts = [True, False])
 
