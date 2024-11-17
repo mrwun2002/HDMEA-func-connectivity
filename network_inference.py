@@ -15,6 +15,7 @@ import logging
 #requires pip install git+https://github.com/christiando/spycon
 #https://github.com/pwollstadt/IDTxl
 #requires pip install git+https://github.com/pwollstadt/IDTxl
+from spycon.spycon.spycon_inference import SpikeConnectivityInference
 import spycon_utils
 
 from typing import Tuple
@@ -22,7 +23,7 @@ from typing import Tuple
 from sklearn.cluster import DBSCAN
 
 
-from spycon.coninf import Smoothed_CCG
+from spycon.coninf import *
 
 import traceback
 
@@ -173,7 +174,7 @@ def infer_connectivity(spike_df: pd.DataFrame, con_method = Smoothed_CCG()):
 
 
 
-def predict_network(data_path, save_path, well_no = 0, recording_no = 0, start_time = 0, end_time = 20, inference_method = "smoothed ccg", frequency_percentile = 70, amplitude_percentile = 20, remove_bursts = True):
+def predict_network(data_path, save_path, inference_method: SpikeConnectivityInference = Smoothed_CCG(), well_no = 0, recording_no = 0, start_time = 0, end_time = 20, frequency_percentile = 70, amplitude_percentile = 20, remove_bursts = True):
     
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
@@ -183,27 +184,17 @@ def predict_network(data_path, save_path, well_no = 0, recording_no = 0, start_t
     logger.addHandler(handler_2)
     
     try:
-    
-        con_method = Smoothed_CCG()
-        if inference_method == "smoothed ccg":
-            #do something
-            con_method = Smoothed_CCG()
-            logging.info("Setting inference method: " + inference_method)
-        else:
-            #TODO: RAISE SOME SORT OF ERROR
-            logging.info("Inference method " + inference_method + "is not defined. Defaulting to smoothed ccg")
-
         #Set up save location and logs and timing
         full_start = time.time()
         logging.info("Starting processing file " + data_path + ": " + time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime(full_start)))
-        logging.info(
+        logging.info(# TODO: include details of inference method params
             f"""\t-----------PARAMS-----------
 \tdata_path: {data_path}
 \twell_no: {well_no}
 \trecording_no: {recording_no}
 \tstart_time: {start_time}
 \tend_time: {end_time}
-\tinference_method: {inference_method}
+\tinference_method: {type(inference_method)}
 \tfrequency_percentile: {frequency_percentile}
 \tamplitude_percentile: {amplitude_percentile}
 \tremove_bursts: {remove_bursts}
@@ -259,7 +250,7 @@ def predict_network(data_path, save_path, well_no = 0, recording_no = 0, start_t
         logging.info("\tInferring connectivity: " + time.strftime('%m/%d/%Y, %H:%M:%S', time.localtime(start)))
 
         plt.figure(figsize = (6, 3))
-        spycon_result = infer_connectivity(grouped_spike_df, con_method = con_method)
+        spycon_result = infer_connectivity(grouped_spike_df, con_method = inference_method)
         plt.savefig(f"{save_path}inference_raster.png")
         plt.close()
 
@@ -358,12 +349,12 @@ def predict_network(data_path, save_path, well_no = 0, recording_no = 0, start_t
 
 
 
-def batch_predict_network(data_path: str, parent_folder: str, well_no = 0, recording_no = 0, start_time = 0, end_time = 20, inference_method = "smoothed ccg", frequency_percentile = 70, amplitude_percentile = 20, remove_bursts = True):
+def batch_predict_network(data_path: str, parent_folder: str, inference_method: SpikeConnectivityInference = Smoothed_CCG(), well_no = 0, recording_no = 0, start_time = 0, end_time = 20, frequency_percentile = 70, amplitude_percentile = 20, remove_bursts = True):
     assert type(parent_folder) is not list
     assert type(data_path) is not list
 
-    args = [well_no, recording_no, start_time, end_time, inference_method, frequency_percentile, amplitude_percentile, remove_bursts]
-    arg_names = ["well_no", "recording_no", "start_time", "end_time", "inference_method", "frequency_percentile", "amplitude_percentile", "remove_bursts"]
+    args = [well_no, recording_no, start_time, end_time, frequency_percentile, amplitude_percentile, remove_bursts]
+    arg_names = ["well_no", "recording_no", "start_time", "end_time", "frequency_percentile", "amplitude_percentile", "remove_bursts"]
     
     
     for i, param in enumerate(args):
@@ -374,11 +365,11 @@ def batch_predict_network(data_path: str, parent_folder: str, well_no = 0, recor
                 new_args = args
                 new_args[i] = param_element
                 
-                batch_predict_network(data_path, new_parent_folder, *new_args)
+                batch_predict_network(data_path, new_parent_folder, inference_method, *new_args)
             
             return
     
-    predict_network(data_path, parent_folder, *args)
+    predict_network(data_path, parent_folder, inference_method, *args)
 
 
 
@@ -390,7 +381,12 @@ def batch_predict_network(data_path: str, parent_folder: str, well_no = 0, recor
 
 
 if __name__ == '__main__':
-    days = [30, 33, 34, 45, 36, 37, 38, 40, 41]
+    inference_methods = ["CoincidenceIndex", "Smoothed_CCG", "directed_STTC", "TE_IDTXL", "GLMPP", "GLMCC"]
+    default_alpha_values = [0.01, 0.01, 0.001, 0.01, 0.01, 0.01]
+    alpha_value_multipliers = [0.1, 0.3, 1, 3, 10]
+
+
+    days = [30, 33, 34, 35, 36, 37, 38, 40, 41]
     #days = [30, 33]
     chip = "M07480"
     well_nos = range(6)
@@ -402,27 +398,46 @@ if __name__ == '__main__':
     remote_drive_path = "/run/user/1000/gvfs/smb-share:server=rstoreint.it.tufts.edu,share=as_rsch_levinlab_wclawson01$/"
     parent_save_path = "HDMEA-func-connectivity/data/test_network_results/"
     parent_save_path = "/run/user/1000/gvfs/smb-share:server=rstoreint.it.tufts.edu,share=as_rsch_levinlab_wclawson01$/Experimental Data/nathan_senior_project_analysis/stim_removal_network_graphs/"
-    for day in days:
-        for well_no in well_nos:
-            file_path = f"{remote_drive_path}Experimental Data/Summer 2024/stim_removal/DIV{day}_stim_removal/{chip}/"
-            print("")
-            print("Starting day {day} well {well_no}")
-            try:
-                file_path = glob.glob(file_path + "/*/")[-1] #date
-                file_path = glob.glob(file_path + "/*/")[-1] #trial
-                file_path = file_path + f"well{well_no}/"
+    
+    for i, inference_method in enumerate(inference_methods):
+        default_alpha_value = default_alpha_values[i]
+        alpha_values = [m * default_alpha_value for m in alpha_value_multipliers]
+        for alpha in alpha_values:
+            if inference_method == "CoincidenceIndex":
+                con_method = CoincidenceIndex(alpha = alpha)
+            elif inference_method == "Smoothed_CCG":
+                con_method = Smoothed_CCG(alpha = alpha)
+            elif inference_method == "directed_STTC":
+                con_method = directed_STTC(alpha = alpha)
+            elif inference_method == "TE_IDTXL":
+                con_method = TE_IDTXL(alpha = alpha)
+            elif inference_method == "GLMPP":
+                con_method = GLMPP(alpha = alpha)
+            elif inference_method == "GLMCC":
+                con_method = GLMCC(alpha = alpha)
 
-                file_name = f"DIV{day}_stim_removal_well_{well_no}.raw.h5"
 
-                recording_no = 0
+            for day in days:
+                for well_no in well_nos:
+                    file_path = f"{remote_drive_path}Experimental Data/Summer 2024/stim_removal/{inference_method}/alpha={alpha}/DIV{day}_stim_removal/{chip}/"
+                    print("")
+                    print("Starting day {day} well {well_no}")
+                    try:
+                        file_path = glob.glob(file_path + "/*/")[-1] #date
+                        file_path = glob.glob(file_path + "/*/")[-1] #trial
+                        file_path = file_path + f"well{well_no}/"
 
-                save_path = f"{parent_save_path}DIV{day}/well_no={well_no}/"
-                os.makedirs(save_path)
+                        file_name = f"DIV{day}_stim_removal_well_{well_no}.raw.h5"
 
-            except Exception as err:
-                print("\tError!", type(err).__name__, err)
-                print(traceback.format_exc())
-                continue
+                        recording_no = 0
 
-            batch_predict_network(file_path + file_name, save_path, well_no = well_no, end_time = 20, remove_bursts = [True, False])
+                        save_path = f"{parent_save_path}DIV{day}/well_no={well_no}/"
+                        os.makedirs(save_path)
+
+                    except Exception as err:
+                        print("\tError!", type(err).__name__, err)
+                        print(traceback.format_exc())
+                        continue
+
+                    batch_predict_network(file_path + file_name, save_path, inference_method= con_method, well_no = well_no, end_time = 20, remove_bursts = [True, False])
 
