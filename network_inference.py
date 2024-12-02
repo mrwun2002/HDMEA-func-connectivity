@@ -15,7 +15,7 @@ import logging
 #requires pip install git+https://github.com/christiando/spycon
 #https://github.com/pwollstadt/IDTxl
 #requires pip install git+https://github.com/pwollstadt/IDTxl
-from spycon.spycon.spycon_inference import SpikeConnectivityInference
+from spycon.spycon_inference import SpikeConnectivityInference
 import spycon_utils
 
 from typing import Tuple
@@ -195,6 +195,7 @@ def predict_network(data_path, save_path, inference_method: SpikeConnectivityInf
 \tstart_time: {start_time}
 \tend_time: {end_time}
 \tinference_method: {type(inference_method)}
+\t\tparams: {inference_method.params}
 \tfrequency_percentile: {frequency_percentile}
 \tamplitude_percentile: {amplitude_percentile}
 \tremove_bursts: {remove_bursts}
@@ -382,11 +383,12 @@ def batch_predict_network(data_path: str, parent_folder: str, inference_method: 
 
 if __name__ == '__main__':
     inference_methods = ["CoincidenceIndex", "Smoothed_CCG", "directed_STTC", "TE_IDTXL", "GLMPP", "GLMCC"]
-    default_alpha_values = [0.01, 0.01, 0.001, 0.01, 0.01, 0.01]
-    alpha_value_multipliers = [0.1, 0.3, 1, 3, 10]
+    #default_alpha_values = [0.01, 0.01, 0.001, 0.01, 0.01, 0.01]
+    #alpha_value_multipliers = [1]
 
 
     days = [30, 33, 34, 35, 36, 37, 38, 40, 41]
+    days = [33, 34, 35, 36, 37, 38]
     #days = [30, 33]
     chip = "M07480"
     well_nos = range(6)
@@ -397,47 +399,48 @@ if __name__ == '__main__':
     remote_drive_path = "R:/"
     remote_drive_path = "/run/user/1000/gvfs/smb-share:server=rstoreint.it.tufts.edu,share=as_rsch_levinlab_wclawson01$/"
     parent_save_path = "HDMEA-func-connectivity/data/test_network_results/"
-    parent_save_path = "/run/user/1000/gvfs/smb-share:server=rstoreint.it.tufts.edu,share=as_rsch_levinlab_wclawson01$/Experimental Data/nathan_senior_project_analysis/stim_removal_network_graphs/"
+    parent_save_path = "/run/user/1000/gvfs/smb-share:server=rstoreint.it.tufts.edu,share=as_rsch_levinlab_wclawson01$/Experimental Data/nathan_senior_project_analysis/stim_removal_network_graphs_run_3/"
     
     for i, inference_method in enumerate(inference_methods):
-        default_alpha_value = default_alpha_values[i]
-        alpha_values = [m * default_alpha_value for m in alpha_value_multipliers]
-        for alpha in alpha_values:
-            if inference_method == "CoincidenceIndex":
-                con_method = CoincidenceIndex(alpha = alpha)
-            elif inference_method == "Smoothed_CCG":
-                con_method = Smoothed_CCG(alpha = alpha)
-            elif inference_method == "directed_STTC":
-                con_method = directed_STTC(alpha = alpha)
-            elif inference_method == "TE_IDTXL":
-                con_method = TE_IDTXL(alpha = alpha)
-            elif inference_method == "GLMPP":
-                con_method = GLMPP(alpha = alpha)
-            elif inference_method == "GLMCC":
-                con_method = GLMCC(alpha = alpha)
+        #default_alpha_value = default_alpha_values[i]
+        #alpha_values = [m * default_alpha_value for m in alpha_value_multipliers]
+        if inference_method == "CoincidenceIndex":
+            con_method = CoincidenceIndex()
+        elif inference_method == "Smoothed_CCG":
+            con_method = Smoothed_CCG()
+        elif inference_method == "directed_STTC":
+            con_method = directed_STTC()
+        elif inference_method == "TE_IDTXL":
+            con_method = TE_IDTXL()
+        elif inference_method == "GLMPP":
+            con_method = GLMPP()
+        elif inference_method == "GLMCC":
+            con_method = GLMCC()
+        else:
+            con_method = None
 
 
-            for day in days:
-                for well_no in well_nos:
-                    file_path = f"{remote_drive_path}Experimental Data/Summer 2024/stim_removal/{inference_method}/alpha={alpha}/DIV{day}_stim_removal/{chip}/"
-                    print("")
-                    print("Starting day {day} well {well_no}")
-                    try:
-                        file_path = glob.glob(file_path + "/*/")[-1] #date
-                        file_path = glob.glob(file_path + "/*/")[-1] #trial
-                        file_path = file_path + f"well{well_no}/"
+        for day in days:
+            for well_no in well_nos:
+                file_path = f"{remote_drive_path}Experimental Data/Summer 2024/stim_removal/DIV{day}_stim_removal/{chip}/"
+                print("")
+                print(f"Starting day {day} well {well_no}")
+                try:
+                    file_path = glob.glob(file_path + "/*/")[-1] #date
+                    file_path = glob.glob(file_path + "/*/")[-1] #trial
+                    file_path = file_path + f"well{well_no}/"
 
-                        file_name = f"DIV{day}_stim_removal_well_{well_no}.raw.h5"
+                    file_name = f"DIV{day}_stim_removal_well_{well_no}.raw.h5"
 
-                        recording_no = 0
+                    recording_no = 0
 
-                        save_path = f"{parent_save_path}DIV{day}/well_no={well_no}/"
-                        os.makedirs(save_path)
+                    save_path = f"{parent_save_path}{inference_method}/DIV{day}/well_no={well_no}/"
+                    os.makedirs(save_path)
 
-                    except Exception as err:
-                        print("\tError!", type(err).__name__, err)
-                        print(traceback.format_exc())
-                        continue
+                except Exception as err:
+                    print("\tError!", type(err).__name__, err)
+                    print(traceback.format_exc())
+                    continue
 
-                    batch_predict_network(file_path + file_name, save_path, inference_method= con_method, well_no = well_no, end_time = 20, remove_bursts = [True, False])
+                batch_predict_network(file_path + file_name, save_path, inference_method= con_method, well_no = well_no, end_time = 20, remove_bursts = [True, False])
 
